@@ -1,6 +1,7 @@
 import json
 from typing import Callable
 
+from application import Request
 from routing import Router
 
 router = Router()
@@ -20,7 +21,7 @@ RESPONSE_TEMPLATE = (
 
 
 @router.route('/questions', methods=['GET'])
-def get_questions(environ: dict, start_response: Callable):
+def get_questions(request: Request, start_response: Callable):
     with open('questions.json', 'r') as questions_file:
         questions = json.load(questions_file)
     response = '<form action="/process_answers" method="post">'
@@ -28,7 +29,7 @@ def get_questions(environ: dict, start_response: Callable):
         response += f'<h3>{question_data["text"]}</h3>'
         for answer_index, answer in enumerate(question_data['answers']):
             response += (
-                f'<input type="radio" id="{answer["id"]}" name="{question_id}" value="{answer["value"]}">'
+                f'<input type="radio" id="{answer["id"]}" name="{question_id}" value="{answer["id"]}">'
                 f'<label for="{answer["id"]}">{answer["label"]}</label><br>'
             )
             if answer_index == len(question_data['answers']) - 1:
@@ -40,23 +41,21 @@ def get_questions(environ: dict, start_response: Callable):
 
 
 @router.route('/process_answers', methods=['POST'])
-def process_answers(environ: dict, start_response: Callable):
-    answers = environ['wsgi.input'].read().decode()
-    get_answer = lambda question_id: answers.split(f'{question_id}=')[1].split('&')[0]
+def process_answers(request: Request, start_response: Callable):
     with open('questions.json', 'r') as questions_file:
         questions = json.load(questions_file)
     correct_answers = 0
     for question_id, question_data in questions.items():
         try:
-            given_answer = get_answer(question_id)
-        except IndexError:
+            given_answer = request.body[question_id]
+        except KeyError:
             start_response('200 OK', [('Content-Type', 'text/html')])
             response = RESPONSE_TEMPLATE.format(
                 '<h1>Ви відповіли не на всі запитання, '
                 '<a href="http://uni_site.com/questions">пройти тест ще раз</a></h1>'
             )
             return [response.encode()]
-        if given_answer == question_data['right_answer_value']:
+        if given_answer == question_data['right_answer_id']:
             correct_answers += 1
     correct_answers_percentage = round((correct_answers / len(questions)) * 100)
     response = RESPONSE_TEMPLATE.format(

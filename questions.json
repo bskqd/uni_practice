@@ -1,64 +1,37 @@
 {
   "1": {
     "text": "Що є мовою програмування",
-    "right_answer_value": "JavaScript",
+    "right_answer_id": "3",
     "answers": [
       {
         "id": "1",
-        "value": "HTML",
         "label": "HTML"
       },
       {
         "id": "2",
-        "value": "CSS",
         "label": "CSS"
       },
       {
         "id": "3",
-        "value": "JavaScript",
         "label": "JavaScript"
       }
     ]
   },
   "2": {
     "text": "Яка мова програмування є компільованою",
-    "right_answer_value": "Go",
+    "right_answer_id": "2",
     "answers": [
       {
         "id": "1",
-        "value": "Python",
         "label": "Python"
       },
       {
         "id": "2",
-        "value": "Go",
         "label": "Go"
       },
       {
         "id": "3",
-        "value": "PHP",
         "label": "PHP"
-      }
-    ]
-  },
-  "3": {
-    "text": "Тест",
-    "right_answer_value": "Тест1",
-    "answers": [
-      {
-        "id": "1",
-        "value": "Тест1",
-        "label": "Тест1"
-      },
-      {
-        "id": "2",
-        "value": "Тест2",
-        "label": "Тест2"
-      },
-      {
-        "id": "3",
-        "value": "Тест3",
-        "label": "Тест3"
       }
     ]
   }

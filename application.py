@@ -1,25 +1,97 @@
+import abc
+from enum import Enum
 from typing import Callable
+from urllib import parse
 
 from routing import Router, Route
+
+
+class RequestMethodsEnum(str, Enum):
+    GET = 'GET'
+    POST = 'POST'
+
+
+class Request(abc.ABC):
+    def __init__(self, path: str, method: str):
+        self.path = path
+        self.method = method
+        self.body = {}
+        self.query_string = {}
+
+    @abc.abstractmethod
+    def fill_request_data(self):
+        pass
+
+
+class PostRequest(Request):
+    body_initial_string: str
+
+    def fill_request_data(self):
+        parsed_body = parse.parse_qs(self.body_initial_string, keep_blank_values=True)
+        for k, v in parsed_body.items():
+            if isinstance(v, list) and len(v) == 1:
+                self.body[k] = v[0]
+                continue
+            self.body[k] = v
+
+
+class GetRequest(Request):
+    query_params_string: str
+
+    def fill_request_data(self):
+        parsed_query_params = parse.parse_qs(self.query_params_string)
+        for k, v in parsed_query_params.items():
+            if isinstance(v, list) and len(v) == 1:
+                self.query_params[k] = v[0]
+                continue
+            self.query_params[k] = v
+
+
+class RequestCreator(abc.ABC):
+    @abc.abstractmethod
+    def create_request(self, environ: dict) -> Request:
+        pass
+
+
+class PostRequestCreator(RequestCreator):
+    def create_request(self, environ: dict) -> Request:
+        post_request = PostRequest(path=environ['PATH_INFO'], method=RequestMethodsEnum.POST)
+        post_request.body_initial_string = environ['wsgi.input'].read().decode()
+        post_request.fill_request_data()
+        return post_request
+
+
+class GetRequestCreator(RequestCreator):
+    def create_request(self, environ: dict) -> Request:
+        get_request = GetRequest(path=environ['PATH_INFO'], method=RequestMethodsEnum.GET)
+        get_request.query_params_string = environ['QUERY_STRING']
+        get_request.fill_request_data()
+        return get_request
 
 
 class Application:
     def __init__(self):
         self._routers: list[Router, ...] = []
+        self._requests_creators: dict[str, RequestCreator] = {
+            'POST': PostRequestCreator(),
+            'GET': GetRequestCreator(),
+        }
 
     def __call__(self, environ: dict, start_response: Callable):
-        return self.handle_request(environ, start_response)
+        request_creator = self._requests_creators.get(environ['REQUEST_METHOD'])
+        request = request_creator.create_request(environ)
+        return self.handle_request(request, start_response)
 
     def include_router(self, router: Router):
         self._routers.append(router)
 
-    def handle_request(self, environ: dict, start_response: Callable):
+    def handle_request(self, request: Request, start_response: Callable):
         for router in self._routers:
-            route: Route = router.get_route(path=environ['PATH_INFO'])
+            route: Route = router.get_route(path=request.path)
             if route:
-                if environ['REQUEST_METHOD'] not in route.methods:
+                if request.method not in route.methods:
                     start_response('405 MethodNotAllowed', [('Content-Type', 'text/html')])
                     return ['Method is not allowed'.encode()]
-                return route.handler(environ, start_response)
+                return route.handler(request, start_response)
         start_response('404 NotFound', [('Content-Type', 'text/html')])
         return ['Path is not valid'.encode()]
