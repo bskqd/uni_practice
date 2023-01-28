@@ -18,7 +18,9 @@ class Request(abc.ABC):
 
 
 class PostRequest(Request):
-    body_initial_string: str
+    def __init__(self, path: str, method: str, body_initial_string: str):
+        super().__init__(path, method)
+        self.body_initial_string = body_initial_string
 
     def fill_request_data(self):
         parsed_body = parse.parse_qs(self.body_initial_string, keep_blank_values=True)
@@ -30,7 +32,9 @@ class PostRequest(Request):
 
 
 class GetRequest(Request):
-    query_params_string: str
+    def __init__(self, path: str, method: str, query_params_string: str):
+        super().__init__(path, method)
+        self.query_params_string = query_params_string
 
     def fill_request_data(self):
         parsed_query_params = parse.parse_qs(self.query_params_string)
@@ -49,16 +53,18 @@ class RequestCreator(abc.ABC):
 
 class PostRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        post_request = PostRequest(path=environ['PATH_INFO'], method='POST')
-        post_request.body_initial_string = environ['wsgi.input'].read().decode()
+        post_request = PostRequest(
+            path=environ['PATH_INFO'],
+            method='POST',
+            body_initial_string=environ['wsgi.input'].read().decode()
+        )
         post_request.fill_request_data()
         return post_request
 
 
 class GetRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        get_request = GetRequest(path=environ['PATH_INFO'], method='GET')
-        get_request.query_params_string = environ['QUERY_STRING']
+        get_request = GetRequest(path=environ['PATH_INFO'], method='GET', query_params_string=environ['QUERY_STRING'])
         get_request.fill_request_data()
         return get_request
 
