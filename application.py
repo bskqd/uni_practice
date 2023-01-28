@@ -1,14 +1,8 @@
 import abc
-from enum import Enum
 from typing import Callable
 from urllib import parse
 
 from routing import Router, Route
-
-
-class RequestMethodsEnum(str, Enum):
-    GET = 'GET'
-    POST = 'POST'
 
 
 class Request(abc.ABC):
@@ -16,7 +10,7 @@ class Request(abc.ABC):
         self.path = path
         self.method = method
         self.body = {}
-        self.query_string = {}
+        self.query_params = {}
 
     @abc.abstractmethod
     def fill_request_data(self):
@@ -55,7 +49,7 @@ class RequestCreator(abc.ABC):
 
 class PostRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        post_request = PostRequest(path=environ['PATH_INFO'], method=RequestMethodsEnum.POST)
+        post_request = PostRequest(path=environ['PATH_INFO'], method='POST')
         post_request.body_initial_string = environ['wsgi.input'].read().decode()
         post_request.fill_request_data()
         return post_request
@@ -63,7 +57,7 @@ class PostRequestCreator(RequestCreator):
 
 class GetRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        get_request = GetRequest(path=environ['PATH_INFO'], method=RequestMethodsEnum.GET)
+        get_request = GetRequest(path=environ['PATH_INFO'], method='GET')
         get_request.query_params_string = environ['QUERY_STRING']
         get_request.fill_request_data()
         return get_request
