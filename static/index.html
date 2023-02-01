@@ -3,8 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <title>Головна сторінка</title>
+
+    <script>
+    var today = new Date();
+    var expiry = new Date(today.getTime() + 30 * 24 * 3600 * 1000); // plus 30 days
+
+    function setCookie(name, value) {
+        document.cookie=name + "=" + escape(value) + "; path=/; expires=" + expiry.toGMTString();
+    }
+    function putCookie(form) {
+       setCookie("username", form[0].username.value);
+       return true;
+    }
+    </script>
 </head>
 <body>
     <a href="http://uni_site.com/questions">Пройти тест</a>
+    <form>
+     <label for="nameBox"></label><input type="text" id="nameBox" name='username'>
+     <input type="button" value="Ввести імʼя та прізвище" id="submit" onclick="putCookie(document.getElementsByTagName('form'));">
+    </form>
+    <br>
+    <form action="/my_results" method="get">
+    <input type="submit" value="Проглянути мої результати">
+    </form>
 </body>
 </html>

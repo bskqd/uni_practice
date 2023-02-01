@@ -6,20 +6,30 @@ from routing import Router, Route
 
 
 class Request(abc.ABC):
-    def __init__(self, path: str, method: str):
-        self.path = path
-        self.method = method
-        self.body = {}
-        self.query_params = {}
+    def __init__(self, path: str, method: str, cookies_string: str):
+        self.path: str = path
+        self.method: str = method
+        self.cookies: dict = self.parse_cookies(cookies_string)
+        self.body: dict = {}
+        self.query_params: dict = {}
 
     @abc.abstractmethod
     def fill_request_data(self):
         pass
 
+    def parse_cookies(self, cookies_string: str) -> dict:
+        cookies = {}
+        if not cookies_string:
+            return cookies
+        for cookie in cookies_string.split(';'):
+            cookie = cookie.split('=')
+            cookies[cookie[0]] = parse.unquote(cookie[1])
+        return cookies
+
 
 class PostRequest(Request):
-    def __init__(self, path: str, method: str, body_initial_string: str):
-        super().__init__(path, method)
+    def __init__(self, path: str, method: str, cookies_string: str, body_initial_string: str):
+        super().__init__(path, method, cookies_string)
         self.body_initial_string = body_initial_string
 
     def fill_request_data(self):
@@ -32,8 +42,8 @@ class PostRequest(Request):
 
 
 class GetRequest(Request):
-    def __init__(self, path: str, method: str, query_params_string: str):
-        super().__init__(path, method)
+    def __init__(self, path: str, method: str, cookies_string: str, query_params_string: str):
+        super().__init__(path, method, cookies_string)
         self.query_params_string = query_params_string
 
     def fill_request_data(self):
@@ -56,7 +66,8 @@ class PostRequestCreator(RequestCreator):
         post_request = PostRequest(
             path=environ['PATH_INFO'],
             method='POST',
-            body_initial_string=environ['wsgi.input'].read().decode()
+            cookies_string=environ.get('HTTP_COOKIE', ''),
+            body_initial_string=environ['wsgi.input'].read().decode(),
         )
         post_request.fill_request_data()
         return post_request
@@ -64,7 +75,12 @@ class PostRequestCreator(RequestCreator):
 
 class GetRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        get_request = GetRequest(path=environ['PATH_INFO'], method='GET', query_params_string=environ['QUERY_STRING'])
+        get_request = GetRequest(
+            path=environ['PATH_INFO'],
+            method='GET',
+            cookies_string=environ.get('HTTP_COOKIE', ''),
+            query_params_string=environ['QUERY_STRING'],
+        )
         get_request.fill_request_data()
         return get_request
 
