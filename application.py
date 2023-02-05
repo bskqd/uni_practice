@@ -10,12 +10,14 @@ class Request(abc.ABC):
         self.path: str = path
         self.method: str = method
         self.cookies: dict = self.parse_cookies(cookies_string)
-        self.body: dict = {}
-        self.query_params: dict = {}
+        self.params: dict = {}
 
-    @abc.abstractmethod
-    def fill_request_data(self):
-        pass
+    def fill_params(self, parsed_params: dict[str, list[str]]):
+        for k, v in parsed_params.items():
+            if isinstance(v, list) and len(v) == 1:
+                self.params[k] = v[0]
+                continue
+            self.params[k] = v
 
     def parse_cookies(self, cookies_string: str) -> dict:
         cookies = {}
@@ -28,31 +30,13 @@ class Request(abc.ABC):
 
 
 class PostRequest(Request):
-    def __init__(self, path: str, method: str, cookies_string: str, body_initial_string: str):
-        super().__init__(path, method, cookies_string)
-        self.body_initial_string = body_initial_string
-
-    def fill_request_data(self):
-        parsed_body = parse.parse_qs(self.body_initial_string, keep_blank_values=True)
-        for k, v in parsed_body.items():
-            if isinstance(v, list) and len(v) == 1:
-                self.body[k] = v[0]
-                continue
-            self.body[k] = v
+    def __init__(self, path: str, cookies_string: str):
+        super().__init__(path, 'POST', cookies_string)
 
 
 class GetRequest(Request):
-    def __init__(self, path: str, method: str, cookies_string: str, query_params_string: str):
-        super().__init__(path, method, cookies_string)
-        self.query_params_string = query_params_string
-
-    def fill_request_data(self):
-        parsed_query_params = parse.parse_qs(self.query_params_string)
-        for k, v in parsed_query_params.items():
-            if isinstance(v, list) and len(v) == 1:
-                self.query_params[k] = v[0]
-                continue
-            self.query_params[k] = v
+    def __init__(self, path: str, cookies_string: str):
+        super().__init__(path, 'GET', cookies_string)
 
 
 class RequestCreator(abc.ABC):
@@ -63,39 +47,43 @@ class RequestCreator(abc.ABC):
 
 class PostRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        post_request = PostRequest(
-            path=environ['PATH_INFO'],
-            method='POST',
-            cookies_string=environ.get('HTTP_COOKIE', ''),
-            body_initial_string=environ['wsgi.input'].read().decode(),
-        )
-        post_request.fill_request_data()
+        post_request = PostRequest(path=environ['PATH_INFO'], cookies_string=environ.get('HTTP_COOKIE', ''))
+        post_request.fill_params(parse.parse_qs(environ['wsgi.input'].read().decode(), keep_blank_values=True))
         return post_request
 
 
 class GetRequestCreator(RequestCreator):
     def create_request(self, environ: dict) -> Request:
-        get_request = GetRequest(
-            path=environ['PATH_INFO'],
-            method='GET',
-            cookies_string=environ.get('HTTP_COOKIE', ''),
-            query_params_string=environ['QUERY_STRING'],
-        )
-        get_request.fill_request_data()
+        get_request = GetRequest(path=environ['PATH_INFO'], cookies_string=environ.get('HTTP_COOKIE', ''))
+        get_request.fill_params(parse.parse_qs(environ['QUERY_STRING']))
         return get_request
 
 
-class Application:
+class RequestCreatorFactoryABC(abc.ABC):
+    @abc.abstractmethod
+    def create_request(self, environ: dict) -> Request:
+        pass
+
+
+class RequestCreatorFactory(RequestCreatorFactoryABC):
     def __init__(self):
-        self._routers: list[Router, ...] = []
         self._requests_creators: dict[str, RequestCreator] = {
             'POST': PostRequestCreator(),
             'GET': GetRequestCreator(),
         }
 
-    def __call__(self, environ: dict, start_response: Callable):
+    def create_request(self, environ: dict) -> Request:
         request_creator = self._requests_creators.get(environ['REQUEST_METHOD'])
-        request = request_creator.create_request(environ)
+        return request_creator.create_request(environ)
+
+
+class Application:
+    def __init__(self):
+        self._routers: list[Router, ...] = []
+        self.__request_creator_factory = RequestCreatorFactory()
+
+    def __call__(self, environ: dict, start_response: Callable):
+        request = self.__request_creator_factory.create_request(environ)
         return self.handle_request(request, start_response)
 
     def include_router(self, router: Router):
