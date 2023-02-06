@@ -1,5 +1,7 @@
 import abc
-from typing import Callable
+from copy import deepcopy
+from datetime import datetime, timedelta
+from typing import Callable, Union
 from urllib import parse
 
 from routing import Router, Route
@@ -77,6 +79,39 @@ class RequestCreatorFactory(RequestCreatorFactoryABC):
         return request_creator.create_request(environ)
 
 
+class ResponseABC(abc.ABC):
+    def __init__(self, status: Union[str, int], content_type: str):
+        self.status = status
+        self.__headers: list[tuple, ...] = []
+        self.__headers.append(('Content-Type', content_type))
+
+    @abc.abstractmethod
+    def format_response(self):
+        pass
+
+    @property
+    def headers(self) -> list[tuple, ...]:
+        return deepcopy(self.__headers)
+
+    def add_header(self, key: str, value: str):
+        if key.lower() == 'content-type' or key.lower() == 'set-cookie':
+            return
+        self.__headers.append((key, value))
+
+    def set_cookie_header(self, key: str, value: str, seconds: int = 60 * 10):
+        dt = (datetime.now() + timedelta(seconds=seconds)).strftime('%a, %d %b %Y %H:%M:%S GMT')
+        self.__headers.append(('Set-Cookie', f'{key}={value}; Expires={dt}; Max-Age={seconds}; Path=/'))
+
+
+class SimpleResponse(ResponseABC):
+    def __init__(self, status: Union[str, int], text: str):
+        super().__init__(status, 'text/html')
+        self.text = text
+
+    def format_response(self):
+        return [self.text.encode()]
+
+
 class Application:
     def __init__(self):
         self._routers: list[Router, ...] = []
@@ -84,18 +119,18 @@ class Application:
 
     def __call__(self, environ: dict, start_response: Callable):
         request = self.__request_creator_factory.create_request(environ)
-        return self.handle_request(request, start_response)
+        response: ResponseABC = self.handle_request(request)
+        start_response(str(response.status), response.headers)
+        return response.format_response()
 
     def include_router(self, router: Router):
         self._routers.append(router)
 
-    def handle_request(self, request: Request, start_response: Callable):
+    def handle_request(self, request: Request) -> ResponseABC:
         for router in self._routers:
             route: Route = router.get_route(path=request.path)
             if route:
                 if request.method not in route.methods:
-                    start_response('405 MethodNotAllowed', [('Content-Type', 'text/html')])
-                    return ['Method is not allowed'.encode()]
-                return route.handler(request, start_response)
-        start_response('404 NotFound', [('Content-Type', 'text/html')])
-        return ['Path is not valid'.encode()]
+                    return SimpleResponse(405, 'Method is not allowed')
+                return route.handler(request)
+        return SimpleResponse(404, 'Path is not valid')
