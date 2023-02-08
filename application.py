@@ -1,17 +1,24 @@
 import abc
+import json
+import uuid
 from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Callable, Union
 from urllib import parse
 
+from cryptography.fernet import Fernet
+
 from routing import Router, Route
 
+fernet = Fernet(b'ZZqGR87-stO2XPezRzJwKM7L5MLSdnc3KlxmXew5G5I=')
 
-class Request(abc.ABC):
+
+class RequestABC(abc.ABC):
     def __init__(self, path: str, method: str, cookies_string: str):
         self.path: str = path
         self.method: str = method
         self.cookies: dict = self.parse_cookies(cookies_string)
+        self.session: dict = self.load_session()
         self.params: dict = {}
 
     def fill_params(self, parsed_params: dict[str, list[str]]):
@@ -25,37 +32,59 @@ class Request(abc.ABC):
         cookies = {}
         if not cookies_string:
             return cookies
-        for cookie in cookies_string.split(';'):
+        for cookie in cookies_string.split('; '):
             cookie = cookie.split('=')
             cookies[cookie[0]] = parse.unquote(cookie[1])
         return cookies
 
+    # TODO: figure out what's wrong with fernet encrypted data in sessions
+    # def load_session(self) -> dict:
+    #     try:
+    #         return json.loads(fernet.decrypt(self.cookies['session'].encode()).decode())
+    #     except (json.JSONDecodeError, KeyError, InvalidToken):
+    #         return {}
 
-class PostRequest(Request):
+    # def load_session(self) -> dict:
+    #     try:
+    #         return json.loads(self.cookies['session'])
+    #     except (json.JSONDecodeError, KeyError, InvalidToken):
+    #         return {}
+
+    def load_session(self) -> dict:
+        session_id = self.cookies['session']
+        with open('sessions.json', 'r') as f:
+            sessions_data = json.load(f)
+        session_data = sessions_data.get(session_id)
+        if not session_data:
+            return {}
+        return json.loads(fernet.decrypt(session_data.encode()).decode())
+
+
+class PostRequest(RequestABC):
     def __init__(self, path: str, cookies_string: str):
         super().__init__(path, 'POST', cookies_string)
 
 
-class GetRequest(Request):
+class GetRequest(RequestABC):
     def __init__(self, path: str, cookies_string: str):
         super().__init__(path, 'GET', cookies_string)
 
 
-class RequestCreator(abc.ABC):
+class RequestCreatorABC(abc.ABC):
     @abc.abstractmethod
-    def create_request(self, environ: dict) -> Request:
+    def create_request(self, environ: dict) -> RequestABC:
         pass
 
 
-class PostRequestCreator(RequestCreator):
-    def create_request(self, environ: dict) -> Request:
+class PostRequestCreator(RequestCreatorABC):
+    def create_request(self, environ: dict) -> RequestABC:
         post_request = PostRequest(path=environ['PATH_INFO'], cookies_string=environ.get('HTTP_COOKIE', ''))
         post_request.fill_params(parse.parse_qs(environ['wsgi.input'].read().decode(), keep_blank_values=True))
         return post_request
 
 
-class GetRequestCreator(RequestCreator):
-    def create_request(self, environ: dict) -> Request:
+class GetRequestCreator(RequestCreatorABC):
+    def create_request(self, environ: dict) -> RequestABC:
         get_request = GetRequest(path=environ['PATH_INFO'], cookies_string=environ.get('HTTP_COOKIE', ''))
         get_request.fill_params(parse.parse_qs(environ['QUERY_STRING']))
         return get_request
@@ -63,18 +92,18 @@ class GetRequestCreator(RequestCreator):
 
 class RequestCreatorFactoryABC(abc.ABC):
     @abc.abstractmethod
-    def create_request(self, environ: dict) -> Request:
+    def create_request(self, environ: dict) -> RequestABC:
         pass
 
 
 class RequestCreatorFactory(RequestCreatorFactoryABC):
     def __init__(self):
-        self._requests_creators: dict[str, RequestCreator] = {
+        self._requests_creators: dict[str, RequestCreatorABC] = {
             'POST': PostRequestCreator(),
             'GET': GetRequestCreator(),
         }
 
-    def create_request(self, environ: dict) -> Request:
+    def create_request(self, environ: dict) -> RequestABC:
         request_creator = self._requests_creators.get(environ['REQUEST_METHOD'])
         return request_creator.create_request(environ)
 
@@ -98,7 +127,28 @@ class ResponseABC(abc.ABC):
             return
         self.__headers.append((key, value))
 
-    def set_cookie_header(self, key: str, value: str, seconds: int = 60 * 10):
+    def set_cookie_header(self, key: str, value: str, seconds: int = 600 * 600):
+        if key.lower() == 'session':
+            return
+        self.__set_cookie_header(key, value, seconds)
+
+    # TODO: figure out what's wrong with fernet encrypted data in sessions
+    # def set_session(self, session_data: dict):
+    #     self.__set_cookie_header('session', fernet.encrypt(json.dumps(session_data).encode()).decode())
+
+    # def set_session(self, session_data: dict):
+    #     self.__set_cookie_header('session', json.dumps(session_data).encode().decode())
+
+    def set_session(self, session_data: dict):
+        session_id = uuid.uuid4().hex
+        self.__set_cookie_header('session', session_id)
+        with open('sessions.json', 'r') as f:
+            sessions_data = json.load(f)
+        sessions_data[session_id] = fernet.encrypt(json.dumps(session_data).encode()).decode()
+        with open('sessions.json', 'w') as f:
+            json.dump(sessions_data, f)
+
+    def __set_cookie_header(self, key: str, value: str, seconds: int = 600 * 600):
         dt = (datetime.now() + timedelta(seconds=seconds)).strftime('%a, %d %b %Y %H:%M:%S GMT')
         self.__headers.append(('Set-Cookie', f'{key}={value}; Expires={dt}; Max-Age={seconds}; Path=/'))
 
@@ -126,7 +176,7 @@ class Application:
     def include_router(self, router: Router):
         self._routers.append(router)
 
-    def handle_request(self, request: Request) -> ResponseABC:
+    def handle_request(self, request: RequestABC) -> ResponseABC:
         for router in self._routers:
             route: Route = router.get_route(path=request.path)
             if route:

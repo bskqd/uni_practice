@@ -1,7 +1,8 @@
 import json
 
 import service_layer.exceptions
-from application import Request, SimpleResponse, ResponseABC
+from application import RequestABC, SimpleResponse, ResponseABC
+from authentication import authentication_required
 from presentation import show_questions, show_not_all_answered_questions_response, show_user_results
 from routing import Router
 from service_layer import services
@@ -22,11 +23,25 @@ RESPONSE_TEMPLATE = (
 )
 
 
+@router.route('/login', methods=['POST'])
+def login(request: RequestABC) -> ResponseABC:
+    if not (username := request.params.get('username')):
+        return SimpleResponse(400, 'Введіть імʼя та прізвище')
+    response = SimpleResponse(
+        200,
+        RESPONSE_TEMPLATE.format(
+            'Успішно. '
+            '<a href="http://uni_site.com/questions">Пройти тест</a>'
+            '<a href="http://uni_site.com">На головну</a>'
+        ),
+    )
+    response.set_session({'username': username})
+    return response
+
+
 @router.route('/questions', methods=['GET'])
-def get_questions(request: Request) -> ResponseABC:
-    if not request.cookies.get('username'):
-        response = RESPONSE_TEMPLATE.format('<a href="http://uni_site.com">Ввести імʼя та прізвище</a>')
-        return SimpleResponse(200, response)
+@authentication_required
+def get_questions(request: RequestABC) -> ResponseABC:
     with open('questions.json', 'r') as questions_file:
         questions = json.load(questions_file)
     response = RESPONSE_TEMPLATE.format(show_questions(questions, request.params))
@@ -34,9 +49,10 @@ def get_questions(request: Request) -> ResponseABC:
 
 
 @router.route('/process_answers', methods=['POST'])
-def process_answers(request: Request) -> ResponseABC:
+@authentication_required
+def process_answers(request: RequestABC) -> ResponseABC:
     try:
-        correct_answers_percentage = services.process_answers(request.cookies.get('username'), request.params)
+        correct_answers_percentage = services.process_answers(request.session['username'], request.params)
     except service_layer.exceptions.NotAllQuestionsAnsweredException:
         response = RESPONSE_TEMPLATE.format(show_not_all_answered_questions_response(request.params))
         return SimpleResponse(200, response)
@@ -51,10 +67,9 @@ def process_answers(request: Request) -> ResponseABC:
 
 
 @router.route('/my_results', methods=['GET'])
-def get_user_results(request: Request) -> ResponseABC:
-    if not (username := request.cookies.get('username')):
-        response = RESPONSE_TEMPLATE.format('<a href="http://uni_site.com">Ввести імʼя та прізвище</a>')
-        return SimpleResponse(200, response)
+@authentication_required
+def get_user_results(request: RequestABC) -> ResponseABC:
+    username = request.session['username']
     with open('user_results.json', 'r') as f:
         try:
             user_results = json.load(f).get(username, [])
