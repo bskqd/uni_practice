@@ -13,16 +13,15 @@ def show_questions(questions: dict, selected_answers: dict[Union[str, list[str, 
 
 
 def show_multichoice_question(question_id: str, question_data: dict, selected_answers: list[str, ...]) -> str:
-    response = (
-        f'<h3><label for="{question_id}">{question_data["text"]}</label></h3>'
-        f'<select name="{question_id}" id="{question_id}" multiple>'
-    )
+    response = f'<h3><label for="{question_id}">{question_data["text"]}</label></h3>'
     for answer_index, answer in enumerate(question_data['answers']):
         response += (
-            f'<option value="{answer["id"]}" {"selected" if answer["id"] in selected_answers else ""}>'
-            f'{answer["label"]}</option>'
+            f'<input type="checkbox" id="{answer["id"]}" name="{question_id}" value="{answer["id"]}"'
+            f'{"checked" if answer["id"] in selected_answers else ""}>'
+            f'<label for="{answer["id"]}">{answer["label"]}</label><br>'
         )
-    response += '</select><br><br>'
+        if answer_index == len(question_data['answers']) - 1:
+            response += '<br>'
     return response
 
 
