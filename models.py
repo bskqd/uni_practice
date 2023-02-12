@@ -1,6 +1,6 @@
 from enum import Enum
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime, func
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime, func, null
 from sqlalchemy.orm import relationship
 
 from database.base import Base
@@ -14,6 +14,12 @@ class IdFieldMixin(Base):
     id = Column(Integer, primary_key=True)
 
 
+class CreatedAtMixin(Base):
+    __abstract__ = True
+
+    created_at = Column(DateTime, default=func.now())
+
+
 class User(IdFieldMixin):
     __tablename__ = 'users'
 
@@ -22,23 +28,22 @@ class User(IdFieldMixin):
     tests = relationship('UserTest', back_populates='user', cascade='all, delete')
 
 
-class UserTest(IdFieldMixin):
+class UserTest(IdFieldMixin, CreatedAtMixin):
     __tablename__ = 'user_tests'
 
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), index=True, nullable=False)
-    created_at = Column(DateTime, default=func.now())
     result = Column(Integer, nullable=True)
 
     user = relationship('User', back_populates='tests')
 
 
-class UserAnswer(IdFieldMixin):
+class UserAnswer(IdFieldMixin, CreatedAtMixin):
     __tablename__ = 'user_answers'
 
     user_test_id = Column(Integer, ForeignKey('user_tests.id', ondelete='CASCADE'), index=True, nullable=False)
     question_id = Column(Integer, ForeignKey('questions.id'), index=True, nullable=False)
     answer_id = Column(Integer, ForeignKey('answers.id'), index=True, nullable=False)
-    answered_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    answered_at = Column(DateTime, default=null, onupdate=func.now())
     is_correct = Column(Boolean, nullable=False)
 
     user_test = relationship('UserTest', back_populates='user_answers')
