@@ -1,10 +1,10 @@
 import json
 
 import service_layer.exceptions
+from authentication import authentication_required
 from presentation import show_questions, show_not_all_answered_questions_response, show_user_results
 from service_layer import services
 from wsgi_application.application import Request, SimpleResponse, ResponseABC
-from wsgi_application.authentication import authentication_required
 from wsgi_application.routing import Router
 
 router = Router()
