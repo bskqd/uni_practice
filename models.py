@@ -35,6 +35,7 @@ class UserTest(IdFieldMixin, CreatedAtMixin):
     result = Column(Integer, nullable=True)
 
     user = relationship('User', back_populates='tests')
+    user_answers = relationship('UserAnswer', back_populates='user_test', cascade='all, delete')
 
 
 class UserAnswer(IdFieldMixin, CreatedAtMixin):
@@ -42,9 +43,10 @@ class UserAnswer(IdFieldMixin, CreatedAtMixin):
 
     user_test_id = Column(Integer, ForeignKey('user_tests.id', ondelete='CASCADE'), index=True, nullable=False)
     question_id = Column(Integer, ForeignKey('questions.id'), index=True, nullable=False)
-    answer_id = Column(Integer, ForeignKey('answers.id'), index=True, nullable=False)
-    answered_at = Column(DateTime, default=null, onupdate=func.now())
-    is_correct = Column(Boolean, nullable=False)
+    # TODO: rework into m2m
+    answer_id = Column(Integer, ForeignKey('answers.id'), index=True, nullable=True)
+    answered_at = Column(DateTime, default=None, onupdate=func.now())
+    is_correct = Column(Boolean, default=False, nullable=False)
 
     user_test = relationship('UserTest', back_populates='user_answers')
     question = relationship('Question', back_populates='user_answers')
@@ -62,6 +64,7 @@ class Question(IdFieldMixin):
     type = Column(String, nullable=False, default=QuestionTypes.SINGLE)
 
     answers = relationship('Answer', back_populates='question', cascade='all, delete')
+    user_answers = relationship('UserAnswer', back_populates='question')
 
 
 class Answer(IdFieldMixin):
@@ -72,3 +75,4 @@ class Answer(IdFieldMixin):
     text = Column(String, nullable=False)
 
     question = relationship('Question', back_populates='answers')
+    user_answers = relationship('UserAnswer', back_populates='answer')

@@ -1,39 +1,26 @@
 from typing import Optional, Union
 
+from models import UserAnswer, Question
 
-def show_questions(questions: dict, selected_answers: dict[Union[str, list[str, ...]], ...]) -> str:
+
+def show_questions(user_answers: list[UserAnswer]) -> str:
     response = '<form action="/process_answers" method="post">'
-    for question_id, question_data in questions.items():
-        if question_data['type'] == 'multi':
-            response += show_multichoice_question(question_id, question_data, selected_answers.get(question_id) or [])
-        else:
-            response += show_single_choice_question(question_id, question_data, selected_answers.get(question_id))
+    for user_answer in user_answers:
+        response += show_question(user_answer)
     response += '<input type="submit" value="Надіслати відповіді"></form>'
     return response
 
 
-def show_multichoice_question(question_id: str, question_data: dict, selected_answers: list[str, ...]) -> str:
-    response = f'<h3><label for="{question_id}">{question_data["text"]}</label></h3>'
-    for answer_index, answer in enumerate(question_data['answers']):
+def show_question(user_answer: UserAnswer) -> str:
+    response = f'<h3><label for="{user_answer.question_id}">{user_answer.question.text}</label></h3>'
+    for answer_index, answer in enumerate(user_answer.question.answers):
         response += (
-            f'<input type="checkbox" id="{answer["id"]}" name="{question_id}" value="{answer["id"]}"'
-            f'{"checked" if answer["id"] in selected_answers else ""}>'
-            f'<label for="{answer["id"]}">{answer["label"]}</label><br>'
+            f'<input type="{"checkbox" if user_answer.question.type == Question.QuestionTypes.MULTI else "radio"}"'
+            f'id="{answer.id}" name="{user_answer.question_id}" value="{answer.id}"'
+            f'{"checked" if user_answer.answer_id else ""}>'
+            f'<label for="{answer.id}">{answer.text}</label><br>'
         )
-        if answer_index == len(question_data['answers']) - 1:
-            response += '<br>'
-    return response
-
-
-def show_single_choice_question(question_id: str, question_data: dict, selected_answer: Optional[str]) -> str:
-    response = f'<h3>{question_data["text"]}</h3>'
-    for answer_index, answer in enumerate(question_data['answers']):
-        response += (
-            f'<input type="radio" id="{answer["id"]}" name="{question_id}" value="{answer["id"]}"'
-            f'{"checked" if selected_answer == answer["id"] else ""}>'
-            f'<label for="{answer["id"]}">{answer["label"]}</label><br>'
-        )
-        if answer_index == len(question_data['answers']) - 1:
+        if answer_index == len(user_answer.question.answers) - 1:
             response += '<br>'
     return response
 
