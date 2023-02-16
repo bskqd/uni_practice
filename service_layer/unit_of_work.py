@@ -9,6 +9,7 @@ import abc
 class AbstractUnitOfWork(abc.ABC):
     users_repo: Optional[AbstractRepository]
     questions_repo: Optional[AbstractRepository]
+    answers_repo: Optional[AbstractRepository]
     user_tests_repo: Optional[AbstractRepository]
     user_answers_repo: Optional[AbstractRepository]
 
@@ -36,6 +37,7 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
             sessionmaker,
             users_repo: Optional[AbstractRepository] = None,
             questions_repo: Optional[AbstractRepository] = None,
+            answers_repo: Optional[AbstractRepository] = None,
             user_tests_repo: Optional[AbstractRepository] = None,
             user_answers_repo: Optional[AbstractRepository] = None,
     ):
@@ -43,6 +45,7 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
         self.__repos = []
         self.users_repo = self.__add_repo(users_repo)
         self.questions_repo = self.__add_repo(questions_repo)
+        self.answers_repo = self.__add_repo(answers_repo)
         self.user_tests_repo = self.__add_repo(user_tests_repo)
         self.user_answers_repo = self.__add_repo(user_answers_repo)
 

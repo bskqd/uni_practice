@@ -1,6 +1,6 @@
 from enum import Enum
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime, func, null
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime, func, null, Table
 from sqlalchemy.orm import relationship
 
 from database.base import Base
@@ -33,9 +33,19 @@ class UserTest(IdFieldMixin, CreatedAtMixin):
 
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), index=True, nullable=False)
     result = Column(Integer, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
 
     user = relationship('User', back_populates='tests')
     user_answers = relationship('UserAnswer', back_populates='user_test', cascade='all, delete')
+
+
+UserAnswersLinkAnswers = Table(
+    'UserAnswersLinkAnswers',
+    Base.metadata,
+    Column('id', Integer, primary_key=True),
+    Column('user_answer_id', Integer, ForeignKey('user_answers.id', ondelete='CASCADE'), index=True),
+    Column('answer_id', Integer, ForeignKey('answers.id'), index=True),
+)
 
 
 class UserAnswer(IdFieldMixin, CreatedAtMixin):
@@ -43,14 +53,12 @@ class UserAnswer(IdFieldMixin, CreatedAtMixin):
 
     user_test_id = Column(Integer, ForeignKey('user_tests.id', ondelete='CASCADE'), index=True, nullable=False)
     question_id = Column(Integer, ForeignKey('questions.id'), index=True, nullable=False)
-    # TODO: rework into m2m
-    answer_id = Column(Integer, ForeignKey('answers.id'), index=True, nullable=True)
     answered_at = Column(DateTime, default=None, onupdate=func.now())
     is_correct = Column(Boolean, default=False, nullable=False)
 
     user_test = relationship('UserTest', back_populates='user_answers')
     question = relationship('Question', back_populates='user_answers')
-    answer = relationship('Answer', back_populates='user_answers')
+    answers = relationship('Answer', secondary=UserAnswersLinkAnswers, back_populates='user_answers')
 
 
 class Question(IdFieldMixin):
@@ -71,8 +79,8 @@ class Answer(IdFieldMixin):
     __tablename__ = 'answers'
 
     question_id = Column(Integer, ForeignKey('questions.id', ondelete='CASCADE'), index=True, nullable=False)
-    is_right = Column(Boolean, nullable=False, default=False)
+    is_correct = Column(Boolean, nullable=False, default=False)
     text = Column(String, nullable=False)
 
     question = relationship('Question', back_populates='answers')
-    user_answers = relationship('UserAnswer', back_populates='answer')
+    user_answers = relationship('UserAnswer', secondary=UserAnswersLinkAnswers, back_populates='answers')

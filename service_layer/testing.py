@@ -1,16 +1,15 @@
-import json
 from datetime import datetime
 from typing import Union, Optional
 
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload, joinedload
 
-from models import Question, UserTest, UserAnswer, User
+from models import Question, UserTest, UserAnswer, User, Answer
 from service_layer.exceptions import NotAllQuestionsAnsweredException, InvalidUsernameException
 from service_layer.unit_of_work import AbstractUnitOfWork
 
 
-class GetQuestionsService:
+class GetUserAnswersService:
     def __init__(self, uow: AbstractUnitOfWork):
         self.uow = uow
         self.users_repo = self.uow.users_repo
@@ -34,7 +33,7 @@ class GetQuestionsService:
         self.uow.commit()
         return self.user_answers_repo.get_many(
             db_query=select(UserAnswer).join(UserAnswer.user_test).where(UserTest.id == user_test.id).options(
-                joinedload(UserAnswer.question).selectinload(Question.answers), joinedload(UserAnswer.answer)
+                joinedload(UserAnswer.question).selectinload(Question.answers), selectinload(UserAnswer.answers)
             )
         )
 
@@ -55,37 +54,71 @@ class GetQuestionsService:
                 ),
                 selectinload(
                     UserTest.user_answers
-                ).joinedload(
-                    UserAnswer.answer
+                ).selectinload(
+                    UserAnswer.answers
                 )
             )
         )
 
 
-def process_answers(username: str, answers: dict[str, Union[str, list[str, ...]]]) -> int:
-    if not username:
-        raise InvalidUsernameException
-    with open('questions.json', 'r') as questions_file:
-        questions = json.load(questions_file)
-    correct_answers = 0
-    for question_id, question_data in questions.items():
-        try:
-            given_answer = answers[question_id]
-        except KeyError:
+class FinishUserTest:
+    def __init__(self, uow: AbstractUnitOfWork):
+        self.uow = uow
+        self.users_repo = self.uow.users_repo
+        self.questions_repo = self.uow.questions_repo
+        self.answers_repo = self.uow.answers_repo
+        self.user_tests_repo = self.uow.user_tests_repo
+        self.user_answers_repo = self.uow.user_answers_repo
+
+    def __call__(self, username: str, answers: dict[str, Union[str, list[str, ...]]]):
+        correct_answers = 0
+        all_questions_answered = True
+        user_test = self.__get_unfinished_user_test(username)
+        for user_answer in user_test.user_answers:
+            given_answer = answers.get(str(user_answer.question_id))
+            if not given_answer:
+                all_questions_answered = False
+                continue
+            given_answer_ids = (
+                [int(given_answer)] if isinstance(given_answer, str) else [int(answer) for answer in given_answer]
+            )
+            answer_is_correct = False
+            if user_answer.question.type == Question.QuestionTypes.SINGLE:
+                answer_is_correct = self.__single_choice_answer_is_correct(user_answer, given_answer_ids)
+            elif user_answer.question.type == Question.QuestionTypes.MULTI:
+                answer_is_correct = self.__multi_choice_answer_is_correct(user_answer, given_answer_ids)
+            if answer_is_correct:
+                correct_answers += 1
+            self.user_answers_repo.update_object(
+                user_answer,
+                is_correct=answer_is_correct,
+                answers=self.answers_repo.get_many(Answer.id.in_(given_answer_ids), fields_to_load=(Answer.id,)),
+            )
+        if all_questions_answered:
+            result = round((correct_answers / len(user_test.user_answers)) * 100)
+            self.user_tests_repo.update_object(user_test, result=result, finished_at=datetime.utcnow())
+        self.uow.commit()
+        if not all_questions_answered:
             raise NotAllQuestionsAnsweredException
-        if given_answer == question_data['right_answer_id']:
-            correct_answers += 1
-    result = round((correct_answers / len(questions)) * 100)
-    update_user_results(username, result)
-    return result
+        return result
 
+    def __get_unfinished_user_test(self, username: str) -> UserTest:
+        user_test = self.user_tests_repo.get_one(
+            db_query=select(UserTest).join(User).options(
+                selectinload(UserTest.user_answers).joinedload(UserAnswer.question),
+                selectinload(UserTest.user_answers).selectinload(UserAnswer.answers),
+            ).where(User.username == username, UserTest.result.is_(None),)
+        )
+        if not user_test:
+            raise InvalidUsernameException
+        return user_test
 
-def update_user_results(username: str, result: int):
-    with open('user_results.json', 'r') as f:
-        try:
-            user_results = json.load(f)
-        except json.JSONDecodeError:
-            user_results = {}
-    user_results.setdefault(username, []).append({'result': result, 'datetime': str(datetime.now())})
-    with open('user_results.json', 'w') as f:
-        json.dump(user_results, f)
+    def __single_choice_answer_is_correct(self, user_answer: UserAnswer, given_answer_ids: list[int]) -> bool:
+        for answer in user_answer.question.answers:
+            if answer.id in given_answer_ids:
+                return answer.is_correct
+        return False
+
+    def __multi_choice_answer_is_correct(self, user_answer: UserAnswer, given_answer_ids: list[int]) -> bool:
+        right_answer_ids = [answer.id for answer in user_answer.question.answers if answer.is_correct]
+        return set(right_answer_ids) == set(given_answer_ids)

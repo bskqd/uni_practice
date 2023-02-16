@@ -26,10 +26,6 @@ class AbstractRepository(ABC):
         pass
 
     @abstractmethod
-    def rollback(self) -> None:
-        pass
-
-    @abstractmethod
     def create_from_object(self, *args, **kwargs):
         pass
 
@@ -54,7 +50,7 @@ class AbstractRepository(ABC):
         pass
 
     @abstractmethod
-    def get_many(self, *args, db_query: Optional[Any] = None, fields_to_load: Optional[tuple[str]] = None):
+    def get_many(self, *args, db_query: Optional[Any] = None, fields_to_load: Optional[tuple] = None):
         pass
 
     @abstractmethod
@@ -82,9 +78,6 @@ class SQLAlchemyRepository(AbstractRepository):
 
     def refresh(self, object_to_refresh: Model) -> None:
         self.__db_session.refresh(object_to_refresh)
-
-    def rollback(self):
-        self.__db_session.rollback()
 
     def create_from_object(self, object_to_create: Optional[Model] = None, **kwargs: Any) -> Model:
         object_to_create = object_to_create if object_to_create else self.model(**kwargs)
