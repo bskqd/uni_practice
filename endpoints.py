@@ -1,11 +1,9 @@
 import service_layer.exceptions
-from adapters.repository import SQLAlchemyRepository
 from authentication import authentication_required
-from database.base import sessionmaker
-from models import User, Question, UserTest, UserAnswer, Answer
 from presentation import show_questions, show_user_results
-from service_layer.testing import GetUserAnswersService, FinishUserTest
-from service_layer.unit_of_work import SqlAlchemyUnitOfWork
+from providers import provide_uow
+from service_layer.testing import GetUserTestAnswers, FinishUserTest
+from service_layer.unit_of_work import AbstractUnitOfWork
 from service_layer.users import UserLoginService, GetUserTestsService
 from wsgi_application.application import Request, SimpleResponse, ResponseABC
 from wsgi_application.routing import Router
@@ -27,13 +25,12 @@ RESPONSE_TEMPLATE = (
 
 
 @router.route('/login', methods=['POST'])
-def login(request: Request) -> ResponseABC:
+@provide_uow
+def login(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
     if not (username := request.body.get('username')):
         return SimpleResponse(400, 'Введіть імʼя та прізвище')
-    uow = SqlAlchemyUnitOfWork(sessionmaker, users_repo=SQLAlchemyRepository(User))
     user_login_service = UserLoginService(uow)
-    with uow:
-        user_login_service(username)
+    user_login_service(username)
     response = SimpleResponse(
         200,
         RESPONSE_TEMPLATE.format(
@@ -48,56 +45,40 @@ def login(request: Request) -> ResponseABC:
 
 @router.route('/questions', methods=['GET'])
 @authentication_required
-def get_questions(request: Request) -> ResponseABC:
-    uow = SqlAlchemyUnitOfWork(
-        sessionmaker,
-        users_repo=SQLAlchemyRepository(User),
-        questions_repo=SQLAlchemyRepository(Question),
-        user_tests_repo=SQLAlchemyRepository(UserTest),
-        user_answers_repo=SQLAlchemyRepository(UserAnswer),
-    )
-    get_questions_service = GetUserAnswersService(uow)
-    with uow:
-        user_answers = get_questions_service(request.session.get('username'))
-        response = RESPONSE_TEMPLATE.format(show_questions(user_answers))
+@provide_uow
+def get_questions(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
+    get_user_test_answers_service = GetUserTestAnswers(uow)
+    user_answers = get_user_test_answers_service(request.session.get('username'))
+    response = RESPONSE_TEMPLATE.format(show_questions(user_answers))
     return SimpleResponse(200, response)
 
 
 @router.route('/process_answers', methods=['POST'])
 @authentication_required
-def process_answers(request: Request) -> ResponseABC:
-    uow = SqlAlchemyUnitOfWork(
-        sessionmaker,
-        users_repo=SQLAlchemyRepository(User),
-        questions_repo=SQLAlchemyRepository(Question),
-        answers_repo=SQLAlchemyRepository(Answer),
-        user_tests_repo=SQLAlchemyRepository(UserTest),
-        user_answers_repo=SQLAlchemyRepository(UserAnswer),
-    )
+@provide_uow
+def process_answers(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
     finish_user_test_service = FinishUserTest(uow)
-    with uow:
-        try:
-            correct_answers_percentage = finish_user_test_service(request.session['username'], request.body)
-            content = (
-                f'<h2>Відсоток правильних відповідей: {correct_answers_percentage}%</h2><br>'
-                '<a href="http://uni_site.com">На головну</a>'
-            )
-        except service_layer.exceptions.NotAllQuestionsAnsweredException:
-            content = (
-                '<h1>Ви відповіли не на всі запитання, <a href="http://uni_site.com/questions">допройти тест</a></h1>'
-            )
-        except service_layer.exceptions.InvalidUsernameException:
-            content = '<a href="http://uni_site.com">Ввести валідні імʼя та прізвище</a>'
+    try:
+        correct_answers_percentage = finish_user_test_service(request.session['username'], request.body)
+        content = (
+            f'<h2>Відсоток правильних відповідей: {correct_answers_percentage}%</h2><br>'
+            '<a href="http://uni_site.com">На головну</a>'
+        )
+    except service_layer.exceptions.NotAllQuestionsAnsweredException:
+        content = (
+            '<h1>Ви відповіли не на всі запитання, <a href="http://uni_site.com/questions">допройти тест</a></h1>'
+        )
+    except service_layer.exceptions.NoUnfinishedUserTestException:
+        content = '<a href="http://uni_site.com">Не знайдено тесту від такого користувача</a>'
     return SimpleResponse(200,  RESPONSE_TEMPLATE.format(content))
 
 
 @router.route('/my_results', methods=['GET'])
 @authentication_required
-def get_user_results(request: Request) -> ResponseABC:
+@provide_uow
+def get_user_results(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
     username = request.session['username']
-    uow = SqlAlchemyUnitOfWork(sessionmaker, user_tests_repo=SQLAlchemyRepository(UserTest))
     get_user_tests_service = GetUserTestsService(uow)
-    with uow:
-        user_tests = get_user_tests_service(username)
-        response = RESPONSE_TEMPLATE.format(show_user_results(username, user_tests))
+    user_tests = get_user_tests_service(username)
+    response = RESPONSE_TEMPLATE.format(show_user_results(username, user_tests))
     return SimpleResponse(200, response)

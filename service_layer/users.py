@@ -21,5 +21,5 @@ class GetUserTestsService:
         self.user_tests_repo = self.uow.user_tests_repo
 
     def __call__(self, username: str) -> list[UserTest]:
-        return self.user_tests_repo.get_many(fields_to_load=(UserTest.result, UserTest.finished_at))
+        return self.user_tests_repo.get_user_tests_by_user(username)
 

@@ -10,10 +10,6 @@ Model = TypeVar('Model')
 
 class AbstractRepository(ABC):
     @abstractmethod
-    def set_db_session(self, session):
-        pass
-
-    @abstractmethod
     def add(self, object_to_add) -> None:
         pass
 
@@ -63,11 +59,8 @@ class AbstractRepository(ABC):
 
 
 class SQLAlchemyRepository(AbstractRepository):
-    def __init__(self, model: Type[Model]):
+    def __init__(self, model: Type[Model], db_session: Session):
         self.model = model
-        self.__db_session = None
-
-    def set_db_session(self, db_session: Session):
         self.__db_session = db_session
 
     def add(self, object_to_add: Model) -> None:
@@ -138,11 +131,12 @@ class SQLAlchemyRepository(AbstractRepository):
         *args: Any,
         unique_results: bool = True,
         db_query: Optional[Select] = None,
-        fields_to_load: Optional[tuple[str]] = None,
-    ) -> Model:
+        fields_to_load: Optional[tuple] = None,
+    ) -> list[Model]:
         select_query = self._get_db_query(*args, db_query=db_query)
         if fields_to_load:
             select_query = select_query.options(load_only(*fields_to_load))
+        print(select_query)
         results = self.__db_session.scalars(select_query)
         return results.unique().all() if unique_results else results.all()
 

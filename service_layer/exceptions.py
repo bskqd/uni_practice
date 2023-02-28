@@ -3,6 +3,6 @@ class NotAllQuestionsAnsweredException(Exception):
         super().__init__('Not all questions were answered')
 
 
-class InvalidUsernameException(Exception):
+class NoUnfinishedUserTestException(Exception):
     def __init__(self):
-        super().__init__('Invalid username provided')
+        super().__init__('No unfinished user\'s test found')

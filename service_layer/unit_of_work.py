@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-from typing import Optional
-
-from adapters.repository import AbstractRepository
 import abc
+
+from sqlalchemy.orm import Session
+
+from adapters.repository.answers_repo import AnswersRepositoryABC, AnswersRepository
+from adapters.repository.questions_repo import QuestionsRepositoryABC, QuestionsRepository
+from adapters.repository.user_answers_repo import UserAnswersRepository, UserAnswersRepositoryABC
+from adapters.repository.user_tests_repo import UserTestsRepository, UserTestsRepositoryABC
+from adapters.repository.users_repo import UsersRepositoryABC, UsersRepository
 
 
 class AbstractUnitOfWork(abc.ABC):
-    users_repo: Optional[AbstractRepository]
-    questions_repo: Optional[AbstractRepository]
-    answers_repo: Optional[AbstractRepository]
-    user_tests_repo: Optional[AbstractRepository]
-    user_answers_repo: Optional[AbstractRepository]
+    users_repo: UsersRepositoryABC
+    questions_repo: QuestionsRepositoryABC
+    answers_repo: AnswersRepositoryABC
+    user_tests_repo: UserTestsRepositoryABC
+    user_answers_repo: UserAnswersRepositoryABC
 
     def __enter__(self) -> AbstractUnitOfWork:
         return self
@@ -19,11 +24,8 @@ class AbstractUnitOfWork(abc.ABC):
     def __exit__(self, *args):
         self.rollback()
 
-    def commit(self):
-        self._commit()
-
     @abc.abstractmethod
-    def _commit(self):
+    def commit(self):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -32,41 +34,18 @@ class AbstractUnitOfWork(abc.ABC):
 
 
 class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
-    def __init__(
-            self,
-            sessionmaker,
-            users_repo: Optional[AbstractRepository] = None,
-            questions_repo: Optional[AbstractRepository] = None,
-            answers_repo: Optional[AbstractRepository] = None,
-            user_tests_repo: Optional[AbstractRepository] = None,
-            user_answers_repo: Optional[AbstractRepository] = None,
-    ):
-        self.sessionmaker = sessionmaker
-        self.__repos = []
-        self.users_repo = self.__add_repo(users_repo)
-        self.questions_repo = self.__add_repo(questions_repo)
-        self.answers_repo = self.__add_repo(answers_repo)
-        self.user_tests_repo = self.__add_repo(user_tests_repo)
-        self.user_answers_repo = self.__add_repo(user_answers_repo)
-
-    def __add_repo(self, repo: Optional[AbstractRepository]) -> AbstractRepository:
-        if repo:
-            self.__repos.append(repo)
-        return repo
-
-    def __enter__(self):
-        if hasattr(self, '__session'):
-            return super().__enter__()
-        self.__session = self.sessionmaker()
-        for repo in self.__repos:
-            repo.set_db_session(self.__session)
-        return super().__enter__()
+    def __init__(self, session: Session):
+        self.__session = session
+        self.users_repo = UsersRepository(session)
+        self.questions_repo = QuestionsRepository(session)
+        self.answers_repo = AnswersRepository(session)
+        self.user_tests_repo = UserTestsRepository(session)
+        self.user_answers_repo = UserAnswersRepository(session)
 
     def __exit__(self, *args):
         super().__exit__(*args)
-        self.__session.close()
 
-    def _commit(self):
+    def commit(self):
         self.__session.commit()
 
     def rollback(self):
