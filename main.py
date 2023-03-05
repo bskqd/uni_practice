@@ -2,6 +2,7 @@ from gunicorn.app.wsgiapp import WSGIApplication
 
 from database.wsgi_sessionmaker import DatabaseSessionMaker
 from endpoints import router
+from sessions_backend import RedisSessionsBackend
 from wsgi_application.application import Application
 
 
@@ -13,6 +14,8 @@ def create_application() -> Application:
     app.set_authentication_failed_redirect_path('http://uni_site.com/login_form.html')
 
     app.set_database_session_maker(DatabaseSessionMaker)
+
+    app.set_sessions_backend(RedisSessionsBackend(host='localhost', port=6379, db=0))
 
     return app
 

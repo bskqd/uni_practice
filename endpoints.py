@@ -28,10 +28,11 @@ RESPONSE_TEMPLATE = (
 @provide_uow
 def login(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
     if not (username := request.body.get('username')):
-        return SimpleResponse(400, 'Введіть імʼя та прізвище')
+        return SimpleResponse(request, 400, 'Введіть імʼя та прізвище')
     user_login_service = UserLoginService(uow)
     user_login_service(username)
     response = SimpleResponse(
+        request,
         200,
         RESPONSE_TEMPLATE.format(
             'Успішно. '
@@ -50,7 +51,7 @@ def get_questions(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
     get_user_test_answers_service = GetUserTestAnswers(uow)
     user_answers = get_user_test_answers_service(request.session.get('username'))
     response = RESPONSE_TEMPLATE.format(show_questions(user_answers))
-    return SimpleResponse(200, response)
+    return SimpleResponse(request, 200, response)
 
 
 @router.route('/process_answers', methods=['POST'])
@@ -70,7 +71,7 @@ def process_answers(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
         )
     except service_layer.exceptions.NoUnfinishedUserTestException:
         content = '<a href="http://uni_site.com">Не знайдено тесту від такого користувача</a>'
-    return SimpleResponse(200,  RESPONSE_TEMPLATE.format(content))
+    return SimpleResponse(request, 200, RESPONSE_TEMPLATE.format(content))
 
 
 @router.route('/my_results', methods=['GET'])
@@ -81,4 +82,4 @@ def get_user_results(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
     get_user_tests_service = GetUserTestsService(uow)
     user_tests = get_user_tests_service(username)
     response = RESPONSE_TEMPLATE.format(show_user_results(username, user_tests))
-    return SimpleResponse(200, response)
+    return SimpleResponse(request, 200, response)

@@ -1,16 +1,19 @@
 import abc
-import json
 from dataclasses import dataclass
 from typing import Union, Any
 from urllib import parse
 
+from wsgi_application.sessions import SessionsBackendABC, FilesystemSessionsBackend
 
-@dataclass
+
+@dataclass(frozen=True)
 class Request:
     path: str
     method: str
     cookies: dict
+    session_id: str
     session: dict
+    sessions_backend: SessionsBackendABC
     body: Any
     query_params: dict[str, Union[str, list[str]]]
 
@@ -31,18 +34,30 @@ class FormUrlencodedBodyParser(BodyParser):
 
 
 class RequestCreator:
-    def __init__(self):
+    def __init__(self, sessions_backend: SessionsBackendABC = FilesystemSessionsBackend()):
         self.__default_body_parser = FormUrlencodedBodyParser()
         self.__body_parsers: dict[str, BodyParser] = {'application/x-www-form-urlencoded': self.__default_body_parser}
+        self.__sessions_backend = sessions_backend
+
+    @property
+    def sessions_backend(self) -> SessionsBackendABC:
+        return self.__sessions_backend
+
+    @sessions_backend.setter
+    def sessions_backend(self, session_backend: SessionsBackendABC):
+        self.__sessions_backend = session_backend
 
     def create_request(self, environ: dict) -> Request:
         cookies = self.__parse_cookies(environ.get('HTTP_COOKIE', ''))
-        session = self.__load_session(cookies.get('session', ''))
+        session_id = cookies.get('session', '')
+        session = self.__sessions_backend.get_session_data(session_id)
         return Request(
             path=environ['PATH_INFO'],
             method=environ['REQUEST_METHOD'],
             cookies=cookies,
+            session_id=session_id,
             session=session,
+            sessions_backend=self.sessions_backend,
             body=self.__parse_body(environ),
             query_params=self.__parse_query_params(environ),
         )
@@ -67,11 +82,3 @@ class RequestCreator:
             cookie = cookie.split('=')
             cookies[cookie[0]] = parse.unquote(cookie[1])
         return cookies
-
-    def __load_session(self, session_id: str) -> dict:
-        with open('sessions.json', 'r') as f:
-            sessions_data = json.load(f)
-        session_data = sessions_data.get(session_id)
-        if not session_data:
-            return {}
-        return json.loads(session_data)

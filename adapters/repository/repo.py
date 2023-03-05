@@ -136,7 +136,6 @@ class SQLAlchemyRepository(AbstractRepository):
         select_query = self._get_db_query(*args, db_query=db_query)
         if fields_to_load:
             select_query = select_query.options(load_only(*fields_to_load))
-        print(select_query)
         results = self.__db_session.scalars(select_query)
         return results.unique().all() if unique_results else results.all()
 
