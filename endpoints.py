@@ -6,6 +6,7 @@ from service_layer.testing import GetUserTestAnswers, FinishUserTest
 from service_layer.unit_of_work import AbstractUnitOfWork
 from service_layer.users import UserLoginService, GetUserTestsService
 from wsgi_application.application import Request, SimpleResponse, ResponseABC
+from wsgi_application.logging import LoggerABC
 from wsgi_application.routing import Router
 
 router = Router()
@@ -57,7 +58,7 @@ def get_questions(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
 @router.route('/process_answers', methods=['POST'])
 @authentication_required
 @provide_uow
-def process_answers(request: Request, uow: AbstractUnitOfWork) -> ResponseABC:
+def process_answers(request: Request, uow: AbstractUnitOfWork, logger: LoggerABC) -> ResponseABC:
     finish_user_test_service = FinishUserTest(uow)
     try:
         correct_answers_percentage = finish_user_test_service(request.session['username'], request.body)
