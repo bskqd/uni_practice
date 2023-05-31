@@ -1,6 +1,8 @@
 from inspect import signature
 from typing import Callable, Type
 
+from jinja2 import FileSystemLoader, Environment
+
 from wsgi_application.authentication import AuthenticationError
 from wsgi_application.database import DatabaseSessionMakerABC, FakeDatabaseSessionMaker
 from wsgi_application.logging import Logger, get_default_logging_configuration, LoggerABC
@@ -55,6 +57,10 @@ class Application:
         self.__sessions_backend = session_backend
         self.__request_creator.sessions_backend = session_backend
 
+    def set_templates_path(self, path: str):
+        environment = Environment(loader=FileSystemLoader(path))
+        self.__dependencies[Environment] = lambda: environment
+
     def handle_request(self, request: Request, database_session: DatabaseSessionMakerABC) -> ResponseABC:
         for router in self._routers:
             route: Route = router.get_route(path=request.path)
@@ -67,5 +73,5 @@ class Application:
     def inject_dependencies(self, handler: Callable, *args, **kwargs):
         for param_name, param in signature(handler).parameters.items():
             if dependency := self.__dependencies.get(param.annotation):
-                kwargs[param_name] = dependency()
+                kwargs[param_name] = dependency()  # TODO: make it possible to pass arguments in dependencies as well
         return handler(*args, **kwargs)

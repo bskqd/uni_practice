@@ -17,6 +17,8 @@ def create_application() -> Application:
 
     app.set_sessions_backend(RedisSessionsBackend(host='localhost', port=6379, db=0))
 
+    app.set_templates_path('static/templates')
+
     return app
 
 
